@@ -5,12 +5,6 @@
 #include <math.h>
 #include <stdbool.h>
 
-/*
- *  The following structure serves to store unsigned integers with "variable" length.
- *  The size of an unsigned integer variable declared as "uintx_t" will be defined on
- *  the application, and it can be "changed" if necessary. Its name is inspired by the
- *  stdint.h libary types and the "x" in it represents its "variable" size.
- */
 typedef struct {
     enum {is_u8, is_u16, is_u32, is_u64} size;
     union {
@@ -19,39 +13,41 @@ typedef struct {
         uint32_t u32;
         uint64_t u64;
     };
-}uintx_t;
+} UnsIntV;
 
-void merge(Node *n, uint8_t start, uint8_t middle, uint8_t end) {
-    uint8_t p1 = start, p2 = middle + 1, len = end - start + 1;
-    uint8_t i, j;
+void merge(Node *n, int16_t start, int16_t mid, int16_t end) {
+    int16_t p1 = start, p2 = mid + 1, len = end - start + 1, i, j;
+    Node *temp = (Node*) malloc(len * sizeof(Node));
     bool end1 = false, end2 = false;
-    Node *temp = (Node*)malloc(len*sizeof(Node));
 
     for(i = 0; i < len; i++) {
         if(!end1 && !end2) {
             if(n[p1].freq > n[p2].freq)
                 temp[i] = n[p1++];
-            else temp[i] = n[p2++];
+            else
+                temp[i] = n[p2++];
 
-            if(p1 > middle) end1 = true;
+            if(p1 > mid) end1 = true;
             if(p2 > end) end2 = true;
-        } else {
-            if(!end1)
-                temp[i] = n[p1++];
-            else temp[i] = n[p2++];
         }
+        else if(!end1)
+            temp[i] = n[p1++];
+        else
+            temp[i] = n[p2++];
     }
+
     for(i = 0, j = start; i < len; i++, j++)
         n[j] = temp[i];
+
     free(temp);
 }
 
-void mergeSort(Node *n, uint8_t start, uint8_t end) {
+void mergeSort(Node *n, int16_t start, int16_t end) {
     if(start < end) {
-        uint8_t middle = (uint8_t)floor((double) (start + end) / 2);
-        mergeSort(n, start, middle);
-        mergeSort(n, middle + 1, end);
-        merge(n, start, middle, end);
+        int16_t mid = (int16_t) floor((double) (start + end) / 2);
+        mergeSort(n, start, mid);
+        mergeSort(n, mid + 1, end);
+        merge(n, start, mid, end);
     }
 }
 
@@ -67,52 +63,52 @@ uint64_t reverse(uint64_t n) {
         count--;
     }
     rev <<= count;
+
     return rev;
 }
 
 HuffmanTree* buildLeaves(FILE *src, HuffmanTree *tree) {
-    int8_t buffer;
-    int16_t i;
-    Node *temp = (Node*)malloc(128*sizeof(Node));
+    if((tree->uniqueCharArray = (Node*) malloc(128 * sizeof(Node))) == NULL)
+        return NULL;
 
-    // '\0' char:
-    temp[0].data.orig = '\0';
-    temp[0].freq = 1;
-    temp[0].type = is_leaf;
-    temp[0].pred = NULL;
+    int i, j = 1;
+    char buf;
+
+    // '\0' char will represent EOF
+    tree->uniqueCharArray[0].data.corresp = 0;
+    tree->uniqueCharArray[0].freq = 1;
+    tree->uniqueCharArray[0].type = is_leaf;
+    tree->uniqueCharArray[0].pred = NULL;
 
     for(i = 1; i < 128; i++) {
-        temp[i].data.orig = (int8_t) i;
-        temp[i].freq = 0;
-        temp[i].type = is_leaf;
-        temp[i].pred = NULL;
+        tree->uniqueCharArray[i].data.corresp = i;
+        tree->uniqueCharArray[i].freq = 0;
+        tree->uniqueCharArray[i].type = is_leaf;
+        tree->uniqueCharArray[i].pred = NULL;
     }
 
-    buffer = (int8_t)fgetc(src);
-    while(buffer != EOF) {
-        temp[buffer].freq++;
-        buffer = (int8_t)fgetc(src);
+    while((buf = fgetc(src)) != EOF)
+        tree->uniqueCharArray[buf].freq++;
+
+    rewind(src); // Go back to the beginning of the file
+
+    while(j < i) {
+        if(tree->uniqueCharArray[j].freq == 0) {
+            i--;
+            Node aux = tree->uniqueCharArray[i];
+            tree->uniqueCharArray[i] = tree->uniqueCharArray[j];
+            tree->uniqueCharArray[j] = aux;
+        } else j++;
     }
 
-    rewind(src); // Go back to the start of the source file
-
-    mergeSort(temp, 0, 127); // Sort nodes
-
-    for(i = 0; temp[i].freq > 0; i++); // Get the number of unique chars
-
-    tree->uniqueChars = (uint8_t) i;
-    tree->leaves = (Node*)malloc(i*sizeof(Node));
-
-    while(i > 0) {
-        i--;
-        tree->leaves[i] = temp[i];
-    }
-    free(temp);
+    tree->uniqueCharCount = i;
+    tree->uniqueCharArray = (Node*) realloc(tree->uniqueCharArray, i * sizeof(Node));
+    mergeSort(tree->uniqueCharArray, 0, i); // Sort nodes
     return tree;
 }
 
 Node* makeNode(Node *left, Node *right) {
-    Node *n = (Node*)malloc(sizeof(Node));
+    Node *n = (Node*) malloc(sizeof(Node));
     n->type = is_internal;
     n->left = left;
     n->right = right;
@@ -124,61 +120,46 @@ Node* makeNode(Node *left, Node *right) {
 }
 
 HuffmanTree* buildHuffmanTree(FILE *src) {
-    HuffmanTree *tree = (HuffmanTree*)malloc(sizeof(HuffmanTree));
-    tree->root = NULL;
-    tree->leaves = NULL;
-    tree = buildLeaves(src, tree);
+    HuffmanTree *tree = (HuffmanTree*) malloc(sizeof(HuffmanTree));
 
-    if(tree->leaves == NULL) {
-        printf("\nThe source file is empty.\n");
-        free(tree);
+    if(tree == NULL || (tree = buildLeaves (src, tree)) == NULL)
         return NULL;
-    }
 
-    if(tree->uniqueChars == 1) {
-        tree->root = tree->leaves;
+    if(tree->uniqueCharCount == 1) {
+        tree->root = tree->uniqueCharArray;
         return tree;
     }
+    Node *subt1 = makeNode(tree->uniqueCharArray + tree->uniqueCharCount - 1,
+                           tree->uniqueCharArray + tree->uniqueCharCount - 2), *subt2 = NULL;
+    int16_t i = (int16_t) tree->uniqueCharCount - 2;
 
-    Node *subt1 = NULL, *subt2 = NULL;
-    int16_t i = (int16_t) tree->uniqueChars;
-
-    do {
-        if(subt1) {
-            if(tree->leaves[i-1].freq >= subt1->freq) {
-                if(subt2 != NULL && subt2->freq <= subt1->freq)
-                    subt2 = makeNode(tree->leaves+i-1, subt2);
-                else subt1 = makeNode(tree->leaves+i-1, subt1);
-                i--;
-            } else {
-                if(subt2 != NULL) {
-                    if (subt2->freq <= subt1->freq)
-                        subt2 = makeNode(tree->leaves+i-1, subt2);
-                    else subt1 = makeNode(tree->leaves+i-1, subt1);
-                    i--;
-                } else {
-                    subt2 = makeNode(tree->leaves+i-1, tree->leaves+i-2);
-                    i -= 2;
-                }
-            }
+    while(i >= 2) {
+        if(tree->uniqueCharArray[i - 1].freq >= subt1->freq) {
+            if(subt2 != NULL && subt2->freq <= subt1->freq)
+                subt2 = makeNode(tree->uniqueCharArray + i - 1, subt2);
+            else subt1 = makeNode(tree->uniqueCharArray + i - 1, subt1);
+            i--;
+        } else if(subt2 != NULL) {
+            if(subt2->freq <= subt1->freq)
+                subt2 = makeNode(tree->uniqueCharArray + i - 1, subt2);
+            else subt1 = makeNode(tree->uniqueCharArray + i - 1, subt1);
+            i--;
         } else {
-            subt1 = makeNode(tree->leaves+i-1, tree->leaves+i-2);
+            subt2 = makeNode(tree->uniqueCharArray + i - 1, tree->uniqueCharArray + i - 2);
             i -= 2;
         }
-    } while(i >= 2);
-
+    }
     if(i == 1) {
         if(subt2 != NULL) {
-            if (subt2->freq <= subt1->freq)
-                subt2 = makeNode(tree->leaves+i-1, subt2);
-            else subt1 = makeNode(tree->leaves+i-1, subt1);
+            if(subt2->freq <= subt1->freq)
+                subt2 = makeNode(tree->uniqueCharArray + i - 1, subt2);
+            else subt1 = makeNode(tree->uniqueCharArray + i - 1, subt1);
             tree->root = makeNode(subt1, subt2);
-        } else tree->root = makeNode(tree->leaves+i-1, subt1);
-    } else {
-        if(subt2 != NULL)
-            tree->root = makeNode(subt2, subt1);
-        else tree->root = subt1;
+        } else tree->root = makeNode(tree->uniqueCharArray + i - 1, subt1);
     }
+    else if(subt2 != NULL) tree->root = makeNode(subt2, subt1);
+    else tree->root = subt1;
+
     return tree;
 }
 
@@ -191,142 +172,145 @@ void getCompactChar(Node *n) {
         n->data.size++;
         comp <<= 1;
         pred = aux->pred;
-        if(aux == pred->right) comp |= 1;
+        if(aux == pred->right)
+            comp |= 1;
         aux = aux->pred;
     }
-    n->data.comp = reverse(comp);
-    n->data.comp >>= 64 - n->data.size;
+    n->data.code = reverse(comp);
+    n->data.code >>= 64 - n->data.size;
 }
 
 HuffmanTree* setCompactChars(HuffmanTree *tree) {
-    int16_t i;
-    for(i = 0; i < tree->uniqueChars; i++)
-        getCompactChar(tree->leaves + i);
+    for(unsigned char i = 0; i < tree->uniqueCharCount; i++)
+        getCompactChar(tree->uniqueCharArray + i);
     return tree;
 }
 
-CompactChar searchCompactChar(Node *leaves, int8_t c) {
-    int16_t i;
-    for(i = 0; leaves[i].data.orig != c; i++);
-    return leaves[i].data;
+CompactChar searchCompactChar(Node *leaves, char c) {
+    unsigned char i = 0;
+    do {
+        if(leaves[i].data.corresp == c)
+            return leaves[i].data;
+        i++;
+    } while(1);
 }
 
-void compressFile(FILE *src, FILE *dest) {
+void writeCompactCharData(FILE *dest, HuffmanTree *tree) {
+    unsigned char freqSize, i;
+    UnsIntV freq;
+
+    if(tree->uniqueCharArray[0].freq < 256) {
+        freqSize = 1;
+        fwrite(&freqSize, 1, 1, dest);
+
+        for(i = 0; i < tree->uniqueCharCount; i++) {
+            fwrite(&tree->uniqueCharArray[i].data.corresp, 1, 1, dest);
+            freq.u8 = (uint8_t) tree->uniqueCharArray[i].freq;
+            fwrite(&freq.u8, 1, 1, dest);
+        }
+    } else if(tree->uniqueCharArray[0].freq < 65536) {
+        freqSize = 2;
+        fwrite(&freqSize, 1, 1, dest);
+
+        for(i = 0; i < tree->uniqueCharCount; i++) {
+            fwrite(&tree->uniqueCharArray[i].data.corresp, 1, 1, dest);
+            freq.u16 = (uint16_t) tree->uniqueCharArray[i].freq;
+            fwrite(&freq.u16, 1, 2, dest);
+        }
+    } else if(tree->uniqueCharArray[0].freq < 4294967296) {
+        freqSize = 4;
+        fwrite(&freqSize, 1, 1, dest);
+
+        for(i = 0; i < tree->uniqueCharCount; i++) {
+            fwrite(&tree->uniqueCharArray[i].data.corresp, 1, 1, dest);
+            freq.u32 = (uint32_t) tree->uniqueCharArray[i].freq;
+            fwrite(&freq.u32, 1, 4, dest);
+        }
+    } else {
+        freqSize = 8;
+        fwrite(&freqSize, 1, 1, dest);
+
+        for(i = 0; i < tree->uniqueCharCount; i++) {
+            fwrite(&tree->uniqueCharArray[i].data.corresp, 1, 1, dest);
+            freq.u64 = (uint64_t) tree->uniqueCharArray[i].freq;
+            fwrite(&freq.u64, 1, 8, dest);
+        }
+    }
+}
+
+int compressFile(FILE *src, FILE *dest) {
     HuffmanTree *tree = buildHuffmanTree(src);
 
-    if(tree == NULL || tree->root == NULL) {
-        printf("\nFile could not be compressed.\n");
-        return;
+    if(tree == NULL) {
+        printf("\nThe file could not be compressed.\n");
+        return 0;
     }
-    uint8_t freqSize; // Number of bytes required to store char frequency
-    uint64_t destBuff, *comptxt, i;
-    int8_t srcBuff;
-    uint8_t bits = 64, shr;
-    uintx_t freq, lastChar;
-    CompactChar c;
+    char srcBuff;
+    unsigned char bits = 64, shr;
+    uint64_t destBuff, *comptxt, i = 0;
+    UnsIntV lastChar;
+    CompactChar comp;
 
     tree = setCompactChars(tree);
-    fwrite(&tree->uniqueChars, 1, sizeof(uint8_t), dest);
+    fwrite(&tree->uniqueCharCount, 1, 1, dest);
+    writeCompactCharData(dest, tree);
 
-    if(tree->leaves[0].freq < 256) freq.size = is_u8;
-    else if(tree->leaves[0].freq < 65536) freq.size = is_u16;
-    else if(tree->leaves[0].freq < 4294967296) freq.size = is_u32;
-    else freq.size = is_u64;
-
-    switch(freq.size) {
-        case is_u8:
-            freqSize = 1;
-            fwrite(&freqSize, 1, sizeof(uint8_t), dest);
-            for(i = 0; i < tree->uniqueChars; i++) {
-                fwrite(&tree->leaves[i].data.orig, 1, sizeof(int8_t), dest);
-                freq.u8 = (uint8_t)tree->leaves[i].freq;
-                fwrite(&(freq.u8), 1, sizeof(uint8_t), dest);
-            }
-            break;
-        case is_u16:
-            freqSize = 2;
-            fwrite(&freqSize, 1, sizeof(uint8_t), dest);
-            for(i = 0; i < tree->uniqueChars; i++) {
-                fwrite(&tree->leaves[i].data.orig, 1, sizeof(int8_t), dest);
-                freq.u16 = (uint16_t)tree->leaves[i].freq;
-                fwrite(&(freq.u16), 1, sizeof(uint16_t), dest);
-            }
-            break;
-        case is_u32:
-            freqSize = 4;
-            fwrite(&freqSize, 1, sizeof(uint8_t), dest);
-            for(i = 0; i < tree->uniqueChars; i++) {
-                fwrite(&tree->leaves[i].data.orig, 1, sizeof(int8_t), dest);
-                freq.u32 = (uint32_t)tree->leaves[i].freq;
-                fwrite(&(freq.u32), 1, sizeof(uint32_t), dest);
-            }
-            break;
-        default:
-            freqSize = 8;
-            fwrite(&freqSize, 1, sizeof(uint8_t), dest);
-            for(i = 0; i < tree->uniqueChars; i++) {
-                fwrite(&tree->leaves[i].data.orig, 1, sizeof(int8_t), dest);
-                freq.u64 = (uint64_t)tree->leaves[i].freq;
-                fwrite(&(freq.u64), 1, sizeof(uint64_t), dest);
-            }
-            break;
-    }
-    comptxt = (uint64_t*)malloc(tree->root->freq*sizeof(uint64_t));
+    comptxt = (uint64_t*) malloc (tree->root->freq * sizeof(uint64_t));
     comptxt[0] = 0;
-    i = 0;
 
     do {
-        srcBuff = (int8_t)fgetc(src);
-        if(srcBuff == EOF) srcBuff = '\0';
-        c = searchCompactChar(tree->leaves, srcBuff);
-        if(bits >= c.size) {
-            bits -= c.size;
-            c.comp <<= bits;
-            comptxt[i] |= c.comp;
+        if((srcBuff = fgetc (src)) == EOF) srcBuff = '\0';
+        comp = searchCompactChar (tree->uniqueCharArray, srcBuff);
+
+        if(bits >= comp.size) {
+            bits -= comp.size;
+            comp.code <<= bits;
+            comptxt[i] |= comp.code;
+
             if(srcBuff == '\0') {
                 if(bits >= 56) {
                     comptxt[i] >>= bits;
                     bits -= 56;
                     lastChar.u8 = (uint8_t) comptxt[i];
                     lastChar.u8 <<= bits;
-                    fwrite(&(lastChar.u8), 1, 1, dest);
+                    fwrite(&lastChar.u8, 1, 1, dest);
                 } else if(bits >= 48) {
                     comptxt[i] >>= bits;
                     bits -= 48;
                     lastChar.u16 = (uint16_t) comptxt[i];
-                    lastChar.u8 <<= bits;
-                    fwrite(&(lastChar.u16), 1, 2, dest);
+                    lastChar.u16 <<= bits;
+                    fwrite(&lastChar.u16, 1, 2, dest);
                 } else if(bits >= 32) {
                     comptxt[i] >>= bits;
                     bits -= 32;
                     lastChar.u32 = (uint32_t) comptxt[i];
-                    lastChar.u8 <<= bits;
-                    fwrite(&(lastChar.u16), 1, 4, dest);
-                } else {
-                    fwrite(&comptxt[i], 1, 8, dest);
-                }
+                    lastChar.u32 <<= bits;
+                    fwrite (&lastChar.u32, 1, 4, dest);
+                } else fwrite(&comptxt[i], 1, 8, dest);
+
                 fclose(src);
                 fclose(dest);
                 free(comptxt);
-                return;
+                return 1;
             }
-            else if(bits == 0) {
+            if(bits == 0) {
                 fwrite(&comptxt[i], 1, sizeof(uint64_t), dest);
                 bits = 64;
                 i++;
                 comptxt[i] = 0;
             }
         } else {
-            shr = c.size - bits;
+            shr = comp.size - bits;
             bits = 64 - shr;
             destBuff = 0;
             while(shr) {
                 destBuff >>= 1;
-                if(c.comp % 2) destBuff |= 0x8000000000000000;
-                c.comp >>= 1;
+                if(comp.code % 2)
+                    destBuff |= 0x8000000000000000;
+                comp.code >>= 1;
                 shr--;
             }
-            comptxt[i] |= c.comp;
+            comptxt[i] |= comp.code;
             fwrite(&comptxt[i], 1, sizeof(uint64_t), dest);
             i++;
             comptxt[i] = 0;
@@ -337,77 +321,79 @@ void compressFile(FILE *src, FILE *dest) {
                     bits -= 56;
                     lastChar.u8 = (uint8_t) comptxt[i];
                     lastChar.u8 <<= bits;
-                    fwrite(&(lastChar.u8), 1, 1, dest);
+                    fwrite(&lastChar.u8, 1, 1, dest);
                 } else if(bits >= 48) {
                     comptxt[i] >>= bits;
                     bits -= 48;
                     lastChar.u16 = (uint16_t) comptxt[i];
-                    lastChar.u8 <<= bits;
-                    fwrite(&(lastChar.u16), 1, 2, dest);
+                    lastChar.u16 <<= bits;
+                    fwrite(&lastChar.u16, 1, 2, dest);
                 } else if(bits >= 32) {
                     comptxt[i] >>= bits;
                     bits -= 32;
                     lastChar.u32 = (uint32_t) comptxt[i];
-                    lastChar.u8 <<= bits;
-                    fwrite(&(lastChar.u16), 1, 4, dest);
-                } else {
-                    fwrite(&comptxt[i], 1, 8, dest);
-                }
+                    lastChar.u32 <<= bits;
+                    fwrite(&lastChar.u32, 1, 4, dest);
+                } else fwrite(&comptxt[i], 1, 8, dest);
+
                 fclose(src);
                 fclose(dest);
                 free(comptxt);
-                return;
+                return 1;
             }
         }
     } while(1);
 }
 
 HuffmanTree* rebuildLeaves(FILE *src) {
-    HuffmanTree *tree = (HuffmanTree*)malloc(sizeof(HuffmanTree));
-    uint8_t freqSize;
-    int16_t i;
-    uintx_t freq;
+    HuffmanTree *tree = (HuffmanTree*) malloc(sizeof(HuffmanTree));
 
-    fread(&tree->uniqueChars, 1, sizeof(uint8_t), src);
-    tree->leaves = (Node*)malloc(tree->uniqueChars*sizeof(Node));
-    tree->root = NULL;
-    fread(&freqSize, 1, sizeof(uint8_t), src);
+    if(tree == NULL) return NULL;
+
+    fread(&tree->uniqueCharCount, 1, 1, src);
+
+    if((tree->uniqueCharArray = (Node*) malloc(tree->uniqueCharCount * sizeof(Node))) == NULL)
+        return NULL;
+
+    UnsIntV freq;
+    unsigned char freqSize, i;
+    fread(&freqSize, 1, 1, src);
 
     switch(freqSize) {
         case 1:
-            for(i = 0; i < tree->uniqueChars; i++) {
-                tree->leaves[i].type = is_leaf;
-                tree->leaves[i].pred = NULL;
-                fread(&tree->leaves[i].data.orig, 1, sizeof(int8_t), src);
-                fread(&(freq.u8), 1, freqSize, src);
-                tree->leaves[i].freq = (uint64_t)freq.u8;
+            for(i = 0; i < tree->uniqueCharCount; i++) {
+                tree->uniqueCharArray[i].type = is_leaf;
+                tree->uniqueCharArray[i].pred = NULL;
+                fread(&tree->uniqueCharArray[i].data.corresp, 1, 1, src);
+                fread(&freq.u8, 1, freqSize, src);
+                tree->uniqueCharArray[i].freq = (uint64_t) freq.u8;
             }
             break;
         case 2:
-            for(i = 0; i < tree->uniqueChars; i++) {
-                tree->leaves[i].type = is_leaf;
-                tree->leaves[i].pred = NULL;
-                fread(&tree->leaves[i].data.orig, 1, sizeof(int8_t), src);
-                fread(&(freq.u16), 1, freqSize, src);
-                tree->leaves[i].freq = (uint64_t)freq.u16;
+            for(i = 0; i < tree->uniqueCharCount; i++) {
+                tree->uniqueCharArray[i].type = is_leaf;
+                tree->uniqueCharArray[i].pred = NULL;
+                fread(&tree->uniqueCharArray[i].data.corresp, 1, 1, src);
+                fread(&freq.u16, 1, freqSize, src);
+                tree->uniqueCharArray[i].freq = (uint64_t) freq.u16;
             }
             break;
         case 4:
-            for(i = 0; i < tree->uniqueChars; i++) {
-                tree->leaves[i].type = is_leaf;
-                tree->leaves[i].pred = NULL;
-                fread(&tree->leaves[i].data.orig, 1, sizeof(int8_t), src);
-                fread(&(freq.u32), 1, freqSize, src);
-                tree->leaves[i].freq = (uint64_t)freq.u32;
+            for(i = 0; i < tree->uniqueCharCount; i++) {
+                tree->uniqueCharArray[i].type = is_leaf;
+                tree->uniqueCharArray[i].pred = NULL;
+                fread(&tree->uniqueCharArray[i].data.corresp, 1, 1, src);
+                fread(&freq.u32, 1, freqSize, src);
+                tree->uniqueCharArray[i].freq = (uint64_t) freq.u32;
             }
             break;
         default:
-            for(i = 0; i < tree->uniqueChars; i++) {
-                tree->leaves[i].type = is_leaf;
-                tree->leaves[i].pred = NULL;
-                fread(&tree->leaves[i].data.orig, 1, sizeof(int8_t), src);
-                fread(&(freq.u64), 1, freqSize, src);
-                tree->leaves[i].freq = (uint64_t)freq.u64;
+            for(i = 0; i < tree->uniqueCharCount; i++) {
+                tree->uniqueCharArray[i].type = is_leaf;
+                tree->uniqueCharArray[i].pred = NULL;
+                fread(&tree->uniqueCharArray[i].data.corresp, 1, 1, src);
+                fread(&freq.u64, 1, freqSize, src);
+                tree->uniqueCharArray[i].freq = (uint64_t) freq.u64;
             }
             break;
     }
@@ -415,98 +401,80 @@ HuffmanTree* rebuildLeaves(FILE *src) {
 }
 
 HuffmanTree* rebuildHuffmanTree(FILE *src) {
-    HuffmanTree *tree = NULL;
-    tree = rebuildLeaves(src);
+    HuffmanTree *tree = rebuildLeaves(src);
 
     if(tree == NULL) {
         printf("\nError while decompressing file\n");
         return NULL;
     }
-    if(tree->leaves == NULL) {
-        printf("\nThe source file is empty.\n");
-        free(tree);
-        return NULL;
-    }
-    if(tree->uniqueChars == 1) {
-        tree->root = tree->leaves;
+    if(tree->uniqueCharCount == 1) {
+        tree->root = tree->uniqueCharArray;
         return tree;
     }
-    uint8_t i = tree->uniqueChars;
-    Node *subt1 = NULL, *subt2 = NULL;
+    Node *subt1 = makeNode (tree->uniqueCharArray + tree->uniqueCharCount - 1,
+                            tree->uniqueCharArray + tree->uniqueCharCount - 2), *subt2 = NULL;
+    unsigned char i = tree->uniqueCharCount - 2;
 
-    do {
-        if(subt1) {
-            if(tree->leaves[i-1].freq >= subt1->freq) {
-                if(subt2 != NULL && subt2->freq <= subt1->freq)
-                    subt2 = makeNode(tree->leaves+i-1, subt2);
-                else subt1 = makeNode(tree->leaves+i-1, subt1);
-                i--;
-            } else {
-                if(subt2 != NULL) {
-                    if (subt2->freq <= subt1->freq)
-                        subt2 = makeNode(tree->leaves+i-1, subt2);
-                    else subt1 = makeNode(tree->leaves+i-1, subt1);
-                    i--;
-                } else {
-                    subt2 = makeNode(tree->leaves+i-1, tree->leaves+i-2);
-                    i -= 2;
-                }
-            }
+    while(i >= 2) {
+        if(tree->uniqueCharArray[i - 1].freq >= subt1->freq) {
+            if(subt2 != NULL && subt2->freq <= subt1->freq)
+                subt2 = makeNode(tree->uniqueCharArray + i - 1, subt2);
+            else subt1 = makeNode(tree->uniqueCharArray + i - 1, subt1);
+            i--;
+        } else if(subt2 != NULL) {
+            if(subt2->freq <= subt1->freq)
+                subt2 = makeNode(tree->uniqueCharArray + i - 1, subt2);
+            else subt1 = makeNode(tree->uniqueCharArray + i - 1, subt1);
+            i--;
         } else {
-            subt1 = makeNode(tree->leaves+i-1, tree->leaves+i-2);
+            subt2 = makeNode(tree->uniqueCharArray + i - 1, tree->uniqueCharArray + i - 2);
             i -= 2;
         }
-    } while(i >= 2);
-
+    }
     if(i == 1) {
         if(subt2 != NULL) {
-            if (subt2->freq <= subt1->freq)
-                subt2 = makeNode(tree->leaves+i-1, subt2);
-            else subt1 = makeNode(tree->leaves+i-1, subt1);
+            if(subt2->freq <= subt1->freq)
+                subt2 = makeNode(tree->uniqueCharArray + i - 1, subt2);
+            else subt1 = makeNode(tree->uniqueCharArray + i - 1, subt1);
             tree->root = makeNode(subt1, subt2);
-        } else tree->root = makeNode(tree->leaves+i-1, subt1);
-    } else {
-        if(subt2 != NULL)
-            tree->root = makeNode(subt2, subt1);
-        else tree->root = subt1;
+        } else tree->root = makeNode(tree->uniqueCharArray + i - 1, subt1);
     }
+    else if(subt2 != NULL) tree->root = makeNode(subt2, subt1);
+    else tree->root = subt1;
     return tree;
 }
 
-void decompressFile(FILE *src, FILE *dest) {
-    fseek(src, 0, SEEK_END); // Get compact file size in bytes
-    int64_t size = ftell(src);
-    rewind(src);
+int decompressFile(FILE *src, FILE *dest) {
+    fseek(src, 0, SEEK_END); // Get file size in bytes
+    int64_t size = ftell (src);
+    rewind (src);
 
     HuffmanTree *tree = rebuildHuffmanTree(src);
 
-    if(!tree || !tree->leaves || !tree->root) return;
+    if(tree == NULL) return 0;
 
     int16_t bits;
     uint64_t srcBuff;
-    int8_t destBuff;
+    char destBuff;
     Node *aux = tree->root;
-
-    size -= ftell(src); // Get compacted text size in bytes
+    size -= ftell (src); // Get compacted text size in bytes
 
     do {
-        bits = fread(&srcBuff, 1, sizeof(uint64_t), src);
+        bits = fread (&srcBuff, 1, 8, src);
         size -= bits;
         bits *= 8;
-        if(bits < 64)
-            srcBuff <<= 64 - bits;
-
+        if(bits < 64) srcBuff <<= 64 - bits;
         do {
             if(srcBuff >= 0x8000000000000000)
                 aux = aux->right;
             else aux = aux->left;
 
             if(aux->type == is_leaf) {
-                destBuff = aux->data.orig;
+                destBuff = aux->data.corresp;
                 if(destBuff == '\0') {
                     fclose(src);
                     fclose(dest);
-                    return;
+                    return 1;
                 }
                 fwrite(&destBuff, 1, 1, dest);
                 aux = tree->root;
@@ -518,4 +486,5 @@ void decompressFile(FILE *src, FILE *dest) {
 
     fclose(src);
     fclose(dest);
+    return 1;
 }
