@@ -13,8 +13,42 @@ typedef struct {
         uint32_t u32;
         uint64_t u64;
     };
-} UnsIntV;
+} uintN;
 
+void swap(Node *n1, Node *n2) {
+    Node temp = *n1;
+    *n1 = *n2;
+    *n2 = temp;
+}
+
+int16_t partition(Node *arr, int16_t low, int16_t high) {
+    Node pivot = arr[low];
+    int16_t i = low - 1, j = high + 1;
+
+    do {
+        do {
+            i++;
+        } while(arr[i].freq > pivot.freq);
+
+        do {
+            j--;
+        } while(arr[j].freq < pivot.freq);
+
+        if(i >= j) return j;
+
+        swap(arr + i, arr + j);
+    } while(true);
+}
+
+void quickSort(Node *arr, int16_t low, int16_t high) {
+    if(low < high) {
+        int16_t p = partition(arr, low, high);
+        quickSort(arr, low, p - 1);
+        quickSort(arr, p + 1, high);
+    }
+}
+
+/*
 void merge(Node *n, int16_t start, int16_t mid, int16_t end) {
     int16_t p1 = start, p2 = mid + 1, len = end - start + 1, i, j;
     Node *temp = (Node*) malloc(len * sizeof(Node));
@@ -50,6 +84,7 @@ void mergeSort(Node *n, int16_t start, int16_t end) {
         merge(n, start, mid, end);
     }
 }
+*/
 
 uint64_t reverse(uint64_t n) {
     uint32_t count = sizeof(n) * 8 - 1;
@@ -86,9 +121,7 @@ HuffmanTree* buildLeaves(FILE *src, HuffmanTree *tree) {
         tree->uniqueCharArray[i].type = is_leaf;
         tree->uniqueCharArray[i].pred = NULL;
     }
-
-    while((buf = fgetc(src)) != EOF)
-        tree->uniqueCharArray[buf].freq++;
+    while((buf = fgetc(src)) != EOF) tree->uniqueCharArray[buf].freq++;
 
     rewind(src); // Go back to the beginning of the file
 
@@ -100,10 +133,9 @@ HuffmanTree* buildLeaves(FILE *src, HuffmanTree *tree) {
             tree->uniqueCharArray[j] = aux;
         } else j++;
     }
-
     tree->uniqueCharCount = i;
     tree->uniqueCharArray = (Node*) realloc(tree->uniqueCharArray, i * sizeof(Node));
-    mergeSort(tree->uniqueCharArray, 0, i); // Sort nodes
+    quickSort(tree->uniqueCharArray, 0, i); // Sort nodes
     return tree;
 }
 
@@ -195,9 +227,9 @@ CompactChar searchCompactChar(Node *leaves, char c) {
     } while(1);
 }
 
-void writeCompactCharData(FILE *dest, HuffmanTree *tree) {
+void encodeMinHeap(FILE *dest, HuffmanTree *tree) {
     unsigned char freqSize, i;
-    UnsIntV freq;
+    uintN freq;
 
     if(tree->uniqueCharArray[0].freq < 256) {
         freqSize = 1;
@@ -248,12 +280,12 @@ int compressFile(FILE *src, FILE *dest) {
     char srcBuff;
     unsigned char bits = 64, shr;
     uint64_t destBuff, *comptxt, i = 0;
-    UnsIntV lastChar;
+    uintN lastChar;
     CompactChar comp;
 
     tree = setCompactChars(tree);
     fwrite(&tree->uniqueCharCount, 1, 1, dest);
-    writeCompactCharData(dest, tree);
+    encodeMinHeap(dest, tree);
 
     comptxt = (uint64_t*) malloc (tree->root->freq * sizeof(uint64_t));
     comptxt[0] = 0;
@@ -342,7 +374,7 @@ int compressFile(FILE *src, FILE *dest) {
                 return 1;
             }
         }
-    } while(1);
+    } while(true);
 }
 
 HuffmanTree* rebuildLeaves(FILE *src) {
@@ -355,7 +387,7 @@ HuffmanTree* rebuildLeaves(FILE *src) {
     if((tree->uniqueCharArray = (Node*) malloc(tree->uniqueCharCount * sizeof(Node))) == NULL)
         return NULL;
 
-    UnsIntV freq;
+    uintN freq;
     unsigned char freqSize, i;
     fread(&freqSize, 1, 1, src);
 
