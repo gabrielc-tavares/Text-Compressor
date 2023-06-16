@@ -48,44 +48,6 @@ void quickSort(Node *arr, int16_t low, int16_t high) {
     }
 }
 
-/*
-void merge(Node *n, int16_t start, int16_t mid, int16_t end) {
-    int16_t p1 = start, p2 = mid + 1, len = end - start + 1, i, j;
-    Node *temp = (Node*) malloc(len * sizeof(Node));
-    bool end1 = false, end2 = false;
-
-    for(i = 0; i < len; i++) {
-        if(!end1 && !end2) {
-            if(n[p1].freq > n[p2].freq)
-                temp[i] = n[p1++];
-            else
-                temp[i] = n[p2++];
-
-            if(p1 > mid) end1 = true;
-            if(p2 > end) end2 = true;
-        }
-        else if(!end1)
-            temp[i] = n[p1++];
-        else
-            temp[i] = n[p2++];
-    }
-
-    for(i = 0, j = start; i < len; i++, j++)
-        n[j] = temp[i];
-
-    free(temp);
-}
-
-void mergeSort(Node *n, int16_t start, int16_t end) {
-    if(start < end) {
-        int16_t mid = (int16_t) floor((double) (start + end) / 2);
-        mergeSort(n, start, mid);
-        mergeSort(n, mid + 1, end);
-        merge(n, start, mid, end);
-    }
-}
-*/
-
 uint64_t reverse(uint64_t n) {
     uint32_t count = sizeof(n) * 8 - 1;
     uint64_t rev = n;
